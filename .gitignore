@@ -1,1 +1,5 @@
 resources/
+test
+test.c
+test_args
+test_args.c

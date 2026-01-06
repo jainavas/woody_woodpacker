@@ -6,7 +6,7 @@
 /*   By: jainavas <jainavas@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/12/23 17:59:21 by jainavas          #+#    #+#             */
-/*   Updated: 2025/12/23 17:59:31 by jainavas         ###   ########.fr       */
+/*   Updated: 2026/01/06 17:40:01 by jainavas         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -52,7 +52,7 @@ int main(int argc, char **argv)
     printf("\n");
     
     // TODO: empaquetar el binario
-    // pack_elf(&elf, key);
+    pack_elf(&elf, key);
     
     cleanup_elf(&elf);
     return 0;
