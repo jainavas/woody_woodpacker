@@ -6,7 +6,7 @@
 ;   By: jainavas <jainavas@student.42.fr>          +#+  +:+       +#+        ;
 ;                                                +#+#+#+#+#+   +#+           ;
 ;   Created: 2025/01/06 23:50:00 by jainavas          #+#    #+#             ;
-;   Updated: 2025/01/06 23:50:01 by jainavas         ###   ########.fr       ;
+;   Updated: 2025/01/07 01:00:00 by jainavas         ###   ########.fr       ;
 ;                                                                            ;
 ; ************************************************************************** ;
 
@@ -25,12 +25,30 @@ section .text
     global _start
 
 _start:
-    ; Los datos están en una posición fija: 440 bytes desde el inicio
-    ; Como el stub está en 0x405000, los datos están en 0x405000 + 440
+    ; ========================================
+    ; GUARDAR TODOS LOS REGISTROS
+    ; ========================================
+    push rax
+    push rbx
+    push rcx
     push rdx
-    ; Obtener la dirección base usando RIP-relative
-    lea rsi, [rel _start]       ; RSI = dirección de _start
-    add rsi, 440                ; RSI = _start + 440 = stub_data
+    push rsi    ; argv
+    push rdi    ; argc
+    push rbp
+    push r8
+    push r9
+    push r10
+    push r11
+    push r12
+    push r13
+    push r14
+    push r15
+    
+    ; ========================================
+    ; CARGAR DATOS DEL STUB
+    ; ========================================
+    ; Obtener dirección de los datos (están al final del stub)
+    lea rsi, [rel stub_data]
     
     ; Cargar datos
     mov r12, [rsi]              ; R12 = text_addr
@@ -38,7 +56,9 @@ _start:
     mov r14, [rsi + 16]         ; R14 = old_entry
     lea r15, [rsi + 24]         ; R15 = dirección de la clave (16 bytes)
     
-    ; === 1. mprotect: hacer .text escribible ===
+    ; ========================================
+    ; 1. MPROTECT: hacer .text escribible
+    ; ========================================
     ; Alinear text_addr a página (4096 = 0x1000)
     mov rdi, r12
     and rdi, ~0xFFF             ; page_start
@@ -55,7 +75,9 @@ _start:
     mov rax, SYS_MPROTECT
     syscall
     
-    ; === 2. Descifrar con RC4 ===
+    ; ========================================
+    ; 2. DESCIFRAR CON RC4
+    ; ========================================
     ; Inicializar S en el stack
     sub rsp, 256                ; S[256] en el stack
     mov rdi, rsp                ; RDI = S
@@ -69,7 +91,9 @@ _start:
     
     add rsp, 256                ; Limpiar stack
     
-    ; === 3. mprotect: restaurar .text a RX ===
+    ; ========================================
+    ; 3. MPROTECT: restaurar .text a RX
+    ; ========================================
     mov rdi, r12
     and rdi, ~0xFFF
     mov rax, r12
@@ -82,15 +106,41 @@ _start:
     mov rax, SYS_MPROTECT
     syscall
     
-    ; === 4. Imprimir "....WOODY...." ===
+    ; ========================================
+    ; 4. IMPRIMIR "....WOODY...."
+    ; ========================================
     mov rax, SYS_WRITE
     mov rdi, 1                  ; stdout
     lea rsi, [rel woody_msg]
     mov rdx, 14
     syscall
     
-    ; === 5. Saltar al entry point original ===
-    jmp r14
+    ; ========================================
+    ; 5. RESTAURAR REGISTROS Y SALTAR
+    ; ========================================
+    ; Guardar old_entry antes de restaurar
+    mov rax, r14                ; RAX = old_entry
+    
+    ; Restaurar todos los registros en orden inverso
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rbp
+    pop rdi     ; argc
+    pop rsi     ; argv
+    pop rdx     ; envp
+    pop rcx
+    pop rbx
+    ; No restauramos rax porque tiene old_entry
+    add rsp, 8  ; Saltar el rax guardado en el stack
+    
+    ; Saltar al entry point original
+    jmp rax
 
 ; ===========================
 ; RC4 Init: rc4_init(S, key, key_len)
@@ -117,22 +167,25 @@ rc4_init:
     mov r9, 16                  ; key_len = 16
     
 .shuffle_loop:
-    movzx rax, byte [rdi + rcx]     ; S[i]
-    mov rbx, rcx
+    xor rax, rax
+    mov al, byte [rdi + rcx]    ; S[i]
+    xor rbx, rbx
+    mov rax, rcx
     xor rdx, rdx
-    mov rax, rbx
-    div r9                          ; i % 16
-    movzx rax, byte [rsi + rdx]     ; key[i % 16]
-    movzx rbx, byte [rdi + rcx]     ; S[i]
+    div r9                      ; i % 16
+    xor rax, rax
+    mov al, byte [rsi + rdx]    ; key[i % 16]
+    xor rbx, rbx
+    mov bl, byte [rdi + rcx]    ; S[i]
     add r8, rbx
     add r8, rax
-    and r8, 0xFF                    ; j = (j + S[i] + key[i%16]) % 256
+    and r8, 0xFF                ; j = (j + S[i] + key[i%16]) % 256
     
     ; Swap S[i] y S[j]
-    mov al, [rdi + rcx]
-    mov bl, [rdi + r8]
-    mov [rdi + rcx], bl
-    mov [rdi + r8], al
+    mov al, byte [rdi + rcx]
+    mov bl, byte [rdi + r8]
+    mov byte [rdi + rcx], bl
+    mov byte [rdi + r8], al
     
     inc rcx
     cmp rcx, 256
@@ -226,6 +279,7 @@ align 8
 ; - key[16] (16 bytes)
 ; TOTAL: 40 bytes
 ; ===========================
+stub_data_offset:
 stub_data:
     dq 0    ; text_addr
     dq 0    ; text_size
